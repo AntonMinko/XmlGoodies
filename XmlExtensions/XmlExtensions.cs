@@ -4,6 +4,9 @@ using System.Xml.Linq;
 
 namespace XmlGoodies
 {
+    /// <summary>
+    /// Set of extension methods to <see cref="XElement"/> and <see cref="XAttribute"/> classes.
+    /// </summary>
     public static class XmlExtensions
     {
         /// <summary>
@@ -13,6 +16,7 @@ namespace XmlGoodies
         /// <param name="name">The <c>XName</c> to match.</param>
         /// <returns>A <c>XElement</c> that matches the specified <c>XName</c>.</returns>
         /// <exception cref="XmlException">Element doesn't have child element with specified name.</exception>
+        /// <exception cref="NullReferenceException">This <c>XElement</c> is <c>null</c>.</exception>
         public static XElement MandatoryElement(this XElement element, XName name)
         {
             XElement childElement = element.Element(name);
@@ -32,9 +36,13 @@ namespace XmlGoodies
         /// <returns>A <c>XElement</c> that matches the specified <c>XName</c>, or generated empty <c>XElement</c> with specified <c>XName</c></returns>
         public static XElement ElementOrEmpty(this XElement element, XName name)
         {
-            XElement childElement = element.Element(name);
-            
-            return childElement ?? new XElement(name);
+            if (element != null)
+            {
+                XElement childElement = element.Element(name);
+                return childElement ?? new XElement(name);
+            }
+
+            return new XElement(name);
         }
         /// <summary>
         /// Gets the <c>XAttribute</c> of this <c>XElement</c> that has the specified <c>XName</c>. If attribute is missing, exception will be thrown.
@@ -43,6 +51,7 @@ namespace XmlGoodies
         /// <param name="name">The <c>XName</c> to match.</param>
         /// <returns>The matched <c>XAttribute</c>.</returns>
         /// <exception cref="XmlException">The <c>XElement</c> doesn't contain an <c>XAttribute</c> with specified <c>XName</c>.</exception>
+        /// <exception cref="NullReferenceException">This <c>XElement</c> is <c>null</c>.</exception>
         public static XAttribute MandatoryAttribute(this XElement element, XName name)
         {
             var attribute = element.Attribute(name);
@@ -64,39 +73,74 @@ namespace XmlGoodies
         /// <returns>The matched <c>XAttribute</c> or generated <c>XAttribute</c> with default value.</returns>
         public static XAttribute AttributeOrEmpty(this XElement element, XName name, string defaultValue = null)
         {
+            if (element == null)
+            {
+                return GetEmptyAttribute(name, defaultValue);
+            }
+
             XAttribute attribute = element.Attribute(name);
-            return attribute ?? new XAttribute(name, defaultValue ?? string.Empty);
+            return attribute ?? GetEmptyAttribute(name, defaultValue);
         }
 
         /// <summary>
-        /// Gets <c>enum</c> value of this <c>XAttribute</c>.
+        /// Gets the typed value of this <c>XAttribute</c>.
         /// </summary>
-        /// <typeparam name="T">An <c>enum</c> type to which attribute value will be converted.</typeparam>
-        /// <param name="attribute">The <c>XAttribute</c> with <c>enum</c> value as a string.</param>
-        /// <param name="defaultValue">The default value which will be returned if attribute has <c>string.Empty</c> value.</param>
+        /// <typeparam name="T">Type to which attribute value will be converted.</typeparam>
+        /// <param name="attribute">The <c>XAttribute</c> with value as a string.</param>
+        /// <param name="defaultValue">The default value which will be returned if attribute is <c>null</c> or it has <c>string.Empty</c> value.</param>
         /// <returns>Value of the specified type.</returns>
         /// <exception cref="XmlException">The value of an attribute cannot be converted to specified type.</exception>
-        /// <remarks>The conversion is case-insensitive.</remarks>
-        public static T EnumValue<T>(this XAttribute attribute, T defaultValue = default(T)) where T : struct, IConvertible
+        /// <remarks>
+        /// This method allows to convert value to one of the following types:
+        /// <list type="bullet">
+        /// <item><c>int</c></item>
+        /// <item><c>uint</c></item>
+        /// <item><c>byte</c></item>
+        /// <item><c>sbyte</c></item>
+        /// <item><c>short</c></item>
+        /// <item><c>ushort</c></item>
+        /// <item><c>char</c></item>
+        /// <item><c>long</c></item>
+        /// <item><c>ulong</c></item>
+        /// <item><c>float</c></item>
+        /// <item><c>double</c></item>
+        /// <item><c>decimal</c></item>
+        /// <item><c>bool</c></item>
+        /// <item><c>DateTime</c></item>
+        /// <item>Any <c>enum</c> (including flags with multiple values)</item>
+        /// </list>
+        /// The conversion of enumeration values is case-insensitive.</remarks>
+        public static T Value<T>(this XAttribute attribute, T defaultValue = default(T)) where T : struct, IConvertible
         {
-            Type typeOfT = typeof(T);
-            if (!typeOfT.IsEnum)
-            {
-                throw new XmlException(string.Format("Type '{0}' must be an enumeration.", typeOfT.Name));
-            }
-
-            if (string.IsNullOrEmpty(attribute.Value))
+            if (attribute == null || string.IsNullOrEmpty(attribute.Value))
             {
                 return defaultValue;
             }
 
-            T value;
-            if (!Enum.TryParse(attribute.Value, /* ignoreCase = */ true, out value))
+            Type typeOfT = typeof(T);
+            if (typeOfT.IsEnum)
             {
-                throw new XmlException(string.Format("The attribute '{0}' has value '{1}' which cannot be converted to the value of type '{2}'.", attribute.Name, attribute.Value, typeOfT.Name));
+                return ConvertToEnumType<T>(attribute, typeOfT);
+            }
+            
+            return ConvertToBuiltInValueType<T>(attribute, typeOfT);
+        }
+
+        /// <summary>
+        /// Gets typed value of this <c>XAttribute</c> using specified conversion method.
+        /// </summary>
+        /// <typeparam name="T">Type to which attribute value will be converted.</typeparam>
+        /// <param name="attribute">The <c>XAttribute</c> with value as a string.</param>
+        /// <param name="convert">Function that converts string value to an instance of specified type.</param>
+        /// <returns>Converted value of the specified type or <c>default(T)</c> if attribute was equal to <c>null</c>.</returns>
+        public static T Value<T>(this XAttribute attribute, Func<string, T> convert)
+        {
+            if (attribute == null)
+            {
+                return default(T);
             }
 
-            return value;
+            return convert(attribute.Value);
         }
 
         /// <summary>
@@ -107,9 +151,14 @@ namespace XmlGoodies
         /// <exception cref="XmlException">The element has different name.</exception>
         public static void AssertName(XElement element, XName expectedName)
         {
+            if (element == null)
+            {
+                throw new XmlException(string.Format("Assertion failed. Wrong XML element received. Expected element with name '{0}', but was 'null'.", expectedName));
+            }
+
             if (element.Name != expectedName)
             {
-                throw new XmlException(string.Format("Assertion failed. Wrong XML element received. Expected element with name '{0}', but was element with name '{1}'.", element.Name, expectedName));
+                throw new XmlException(string.Format("Assertion failed. Wrong XML element received. Expected element with name '{0}', but was element with name '{1}'.", expectedName, element.Name));
             }
         }
 
@@ -147,6 +196,35 @@ namespace XmlGoodies
             }
 
             return null;
+        }
+
+
+        private static T ConvertToBuiltInValueType<T>(XAttribute attribute, Type typeOfT) where T : IConvertible
+        {
+            try
+            {
+                return (T)Convert.ChangeType(attribute.Value, typeof(T));
+            }
+            catch (Exception)
+            {
+                throw new XmlException(string.Format("The attribute '{0}' has value '{1}' which cannot be converted to the value of type '{2}'.", attribute.Name, attribute.Value, typeOfT.Name));
+            }
+        }
+
+        private static T ConvertToEnumType<T>(XAttribute attribute, Type typeOfT) where T : struct, IConvertible
+        {
+            T value;
+            if (!Enum.TryParse(attribute.Value, /* ignoreCase = */ true, out value))
+            {
+                throw new XmlException(string.Format("The attribute '{0}' has value '{1}' which cannot be converted to the value of type '{2}'.", attribute.Name, attribute.Value, typeOfT.Name));
+            }
+
+            return value;
+        }
+
+        private static XAttribute GetEmptyAttribute(XName name, string defaultValue)
+        {
+            return new XAttribute(name, defaultValue ?? string.Empty);
         }
     }
 }

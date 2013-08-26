@@ -35,6 +35,11 @@ namespace XmlGoodies
             var dummyElement = element.ElementOrEmpty("AbsentElement");
             Assert.IsNotNull(dummyElement, "dummyElement != null");
             Assert.AreEqual("AbsentElement", dummyElement.Name.ToString(), "dummyElement != null");
+
+            element = null;
+            dummyElement = element.ElementOrEmpty("AbsentElement");
+            Assert.IsNotNull(dummyElement, "dummyElement != null");
+            Assert.AreEqual("AbsentElement", dummyElement.Name.ToString(), "dummyElement != null");
         }
 
         [Test]
@@ -69,6 +74,57 @@ namespace XmlGoodies
 
             dummyAttribute = element.AttributeOrEmpty("dummyAttribute", "default value");
             Assert.AreEqual("default value", dummyAttribute.Value, "dummyAttribute.Value default value");
+
+            element = null;
+            dummyAttribute = element.AttributeOrEmpty("dummyAttribute");
+            Assert.IsNotNull(dummyAttribute, "dummyAttribute != null");
+            Assert.AreEqual("dummyAttribute", dummyAttribute.Name.ToString(), "dummyAttribute.Name");
+        }
+
+        [Test]
+        public void ValueWithBuiltInTypesTest()
+        {
+            var intAttribute = new XAttribute("int", "10");
+            Assert.AreEqual(10, intAttribute.Value<int>());
+
+            var uintAttribute = new XAttribute("uint", "123");
+            Assert.AreEqual(123U, uintAttribute.Value<uint>());
+
+            var shortAttribute = new XAttribute("short", "-12");
+            Assert.AreEqual(-12, shortAttribute.Value<short>());
+
+            var ushortAttribute = new XAttribute("ushort", "123");
+            Assert.AreEqual(123, ushortAttribute.Value<ushort>());
+
+            var byteAttribute = new XAttribute("byte", "0");
+            Assert.AreEqual(0, byteAttribute.Value<byte>());
+
+            var sbyteAttribute = new XAttribute("sbyte", "-10");
+            Assert.AreEqual(-10, sbyteAttribute.Value<sbyte>());
+
+            var charAttribute = new XAttribute("char", "c");
+            Assert.AreEqual('c', charAttribute.Value<char>());
+
+            var longAttribute = new XAttribute("long", "999");
+            Assert.AreEqual(999L, longAttribute.Value<long>());
+
+            var ulongAttribute = new XAttribute("ulong", "100");
+            Assert.AreEqual(100UL, ulongAttribute.Value<ulong>());
+
+            var floatAttribute = new XAttribute("float", 90.90F.ToString());
+            Assert.AreEqual(90.90F, floatAttribute.Value<float>());
+
+            var doubleAttribute = new XAttribute("double", 10.10D.ToString());
+            Assert.AreEqual(10.10D, doubleAttribute.Value<double>());
+
+            var decimalAttribute = new XAttribute("decimal", 10.10M.ToString());
+            Assert.AreEqual(10.10M, decimalAttribute.Value<decimal>());
+
+            var boolAttribute = new XAttribute("bool", "true");
+            Assert.AreEqual(true, boolAttribute.Value<bool>());
+
+            var dateTimeAttribute = new XAttribute("DateTime", new DateTime(3000, 1, 1).ToString());
+            Assert.AreEqual(new DateTime(3000, 1, 1), dateTimeAttribute.Value<DateTime>());
         }
 
         [Flags]
@@ -86,8 +142,17 @@ namespace XmlGoodies
             var attribute = new XAttribute("color", Colors.Blue);
             Assert.AreEqual("Blue", attribute.Value);
 
-            Colors colors = attribute.EnumValue<Colors>();
+            Colors colors = attribute.Value<Colors>();
             Assert.AreEqual(Colors.Blue, colors, "Blue");
+        }
+
+        [Test]
+        public void SingleEnumValueWrongCaseTest()
+        {
+            var attribute = new XAttribute("color", "green");
+
+            Colors colors = attribute.Value<Colors>();
+            Assert.AreEqual(Colors.Green, colors, "Green");
         }
 
         [Test]
@@ -96,7 +161,7 @@ namespace XmlGoodies
             var attribute = new XAttribute("color", Colors.Red | Colors.Green);
             Assert.AreEqual("Red, Green", attribute.Value);
 
-            Colors colors = attribute.EnumValue<Colors>();
+            Colors colors = attribute.Value<Colors>();
             Assert.AreEqual(Colors.Red | Colors.Green, colors, "Red | Green");
         }
 
@@ -105,23 +170,35 @@ namespace XmlGoodies
         {
             var attribute = new XAttribute("color", string.Empty);
             
-            Colors colors = attribute.EnumValue<Colors>();
+            Colors colors = attribute.Value<Colors>();
             Assert.AreEqual(Colors.None, colors, "None");
 
-            colors = attribute.EnumValue<Colors>(Colors.Green);
+            colors = attribute.Value<Colors>(Colors.Green);
             Assert.AreEqual(Colors.Green, colors, "Green");
+
+            attribute = null;
+            colors = attribute.Value<Colors>();
+            Assert.AreEqual(Colors.None, colors, "Null -> None");
         }
 
         [Test]
-        public void EnumValueErrorHandlingTest()
+        public void ValueErrorHandlingTest()
         {
-            var attribute = new XAttribute("colorAttribute", "Purple");
+            var enumAttribute = new XAttribute("colorAttribute", "Purple");
 
-            var ex = Assert.Throws<XmlException>(() => attribute.EnumValue<DateTime>());
-            Assert.IsTrue(ex.Message.Contains("DateTime"), "Type exception");
+            var ex = Assert.Throws<XmlException>(() => enumAttribute.Value<Colors>());
+            Assert.IsTrue(ex.Message.Contains("colorAttribute") && ex.Message.Contains("Purple") && ex.Message.Contains("Colors"), "Enum value exception");
 
-            ex = Assert.Throws<XmlException>(() => attribute.EnumValue<Colors>());
-            Assert.IsTrue(ex.Message.Contains("colorAttribute") && ex.Message.Contains("Purple") && ex.Message.Contains("Colors"), "Value exception");
+            var intAttribute = new XAttribute("number", "one");
+            ex = Assert.Throws<XmlException>(() => intAttribute.Value<int>());
+            Assert.IsTrue(ex.Message.Contains("number") && ex.Message.Contains("one") && ex.Message.Contains("Int32"), "int value exception");
+        }
+
+        [Test]
+        public void ValueOfCustomTypeTest()
+        {
+            var urlAttribute = new XAttribute("url", "http://google.com");
+            Assert.AreEqual(new Uri("http://google.com"), urlAttribute.Value(s => new Uri(s)));
         }
 
         [Test]
