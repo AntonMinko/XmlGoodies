@@ -13,7 +13,7 @@ namespace XmlGoodies
         {
             var element = new XElement("Test", new XElement("Child", 1));
 
-            var childElement = element.MandatoryElement("Child");  
+            var childElement = element.MandatoryElement("Child");
 
             Assert.IsNotNull(childElement, "childElement != null");
             Assert.AreEqual("Child", childElement.Name.ToString(), "childElement.Name");
@@ -128,7 +128,7 @@ namespace XmlGoodies
         }
 
         [Flags]
-        enum Colors
+        private enum Colors
         {
             None = 0,
             Red = 1,
@@ -169,7 +169,7 @@ namespace XmlGoodies
         public void DefaultEnumValueTest()
         {
             var attribute = new XAttribute("color", string.Empty);
-            
+
             Colors colors = attribute.Value<Colors>();
             Assert.AreEqual(Colors.None, colors, "None");
 
@@ -187,18 +187,40 @@ namespace XmlGoodies
             var enumAttribute = new XAttribute("colorAttribute", "Purple");
 
             var ex = Assert.Throws<XmlException>(() => enumAttribute.Value<Colors>());
-            Assert.IsTrue(ex.Message.Contains("colorAttribute") && ex.Message.Contains("Purple") && ex.Message.Contains("Colors"), "Enum value exception");
+            Assert.IsTrue(
+                ex.Message.Contains("colorAttribute") && ex.Message.Contains("Purple") && ex.Message.Contains("Colors"),
+                "Enum value exception");
 
             var intAttribute = new XAttribute("number", "one");
             ex = Assert.Throws<XmlException>(() => intAttribute.Value<int>());
-            Assert.IsTrue(ex.Message.Contains("number") && ex.Message.Contains("one") && ex.Message.Contains("Int32"), "int value exception");
+            Assert.IsTrue(ex.Message.Contains("number") && ex.Message.Contains("one") && ex.Message.Contains("Int32"),
+                "int value exception");
         }
 
         [Test]
-        public void ValueOfCustomTypeTest()
+        public void ElementValueTest()
+        {
+            var intElement = new XElement("int", "10");
+            Assert.AreEqual(10, intElement.Value<int>());
+
+            var enumElement = new XElement("color", Colors.Red | Colors.Green); // Value = "Red, Green"
+            Assert.AreEqual("Red, Green", enumElement.Value);
+            Colors colors = enumElement.Value<Colors>();
+            Assert.AreEqual(Colors.Red | Colors.Green, colors, "Red | Green");
+        }
+
+        [Test]
+        public void AttributeValueOfCustomTypeTest()
         {
             var urlAttribute = new XAttribute("url", "http://google.com");
             Assert.AreEqual(new Uri("http://google.com"), urlAttribute.Value(s => new Uri(s)));
+        }
+
+        [Test]
+        public void ElementValueOfCustomTypeTest()
+        {
+            var urlElement = new XElement("Url", "http://google.com");
+            Assert.AreEqual(new Uri("http://google.com"), urlElement.Value(s => new Uri(s)));
         }
 
         [Test]
@@ -207,12 +229,16 @@ namespace XmlGoodies
             var element = new XElement("Element");
 
             Assert.DoesNotThrow(() => XmlExtensions.AssertName(element, "Element"));
-            
+
             var ex = Assert.Throws<XmlException>(() => XmlExtensions.AssertName(element, "AnotherName"));
             Assert.IsTrue(ex.Message.Contains("'AnotherName'") && ex.Message.Contains("'Element'"), "AnotherName");
 
-            ex = Assert.Throws<XmlException>(() => XmlExtensions.AssertName(element, "{http://schemas.xyz.com/namespaceUri}Element"));
-            Assert.IsTrue(ex.Message.Contains("'{http://schemas.xyz.com/namespaceUri}Element'") && ex.Message.Contains("'Element'"), "with namespace");
+            ex =
+                Assert.Throws<XmlException>(
+                    () => XmlExtensions.AssertName(element, "{http://schemas.xyz.com/namespaceUri}Element"));
+            Assert.IsTrue(
+                ex.Message.Contains("'{http://schemas.xyz.com/namespaceUri}Element'") &&
+                ex.Message.Contains("'Element'"), "with namespace");
         }
 
         [Test]
@@ -221,11 +247,8 @@ namespace XmlGoodies
             var element = XmlExtensions.NewOptionalXElement("Element", "value");
             Assert.IsNotNull(element);
 
-            element = XmlExtensions.NewOptionalXElement("Element", null);
-            Assert.IsNull(element);
-
-            element = XmlExtensions.NewOptionalXElement("Element", null, defaultValue: 1);
-            Assert.IsNull(element);
+            element = XmlExtensions.NewOptionalXElement("Element", (int?) null, defaultValue: 1);
+            Assert.IsNotNull(element);
 
             element = XmlExtensions.NewOptionalXElement("Element", 1, defaultValue: 1);
             Assert.IsNull(element);
@@ -244,6 +267,16 @@ namespace XmlGoodies
             Assert.IsNull(element);
 
             element = XmlExtensions.NewOptionalXAttribute("attribute", 1, defaultValue: 1);
+            Assert.IsNull(element);
+        }
+
+        [Test]
+        public void NewOptionalXElementsTest()
+        {
+            var element = XmlExtensions.NewOptionalXElements("Element", () => true, "value");
+            Assert.IsNotNull(element);
+
+            element = XmlExtensions.NewOptionalXElements("Element", () => false, "value");
             Assert.IsNull(element);
         }
     }

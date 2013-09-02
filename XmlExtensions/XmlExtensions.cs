@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -22,7 +23,8 @@ namespace XmlGoodies
             XElement childElement = element.Element(name);
             if (childElement == null)
             {
-                throw new XmlException(string.Format("The element '{0}' doesn't contain mandatory child element '{1}'.", element.Name, name));
+                throw new XmlException(string.Format(
+                    "The element '{0}' doesn't contain mandatory child element '{1}'.", element.Name, name));
             }
 
             return childElement;
@@ -44,6 +46,7 @@ namespace XmlGoodies
 
             return new XElement(name);
         }
+
         /// <summary>
         /// Gets the <c>XAttribute</c> of this <c>XElement</c> that has the specified <c>XName</c>. If attribute is missing, exception will be thrown.
         /// </summary>
@@ -59,7 +62,7 @@ namespace XmlGoodies
             {
                 throw new XmlException(string.Format("Mandatory attribute '{0}' is missing in the element '{1}'.", name, element.Name));
             }
-            
+
             return attribute;
         }
 
@@ -86,7 +89,7 @@ namespace XmlGoodies
         /// Gets the typed value of this <c>XAttribute</c>.
         /// </summary>
         /// <typeparam name="T">Type to which attribute value will be converted.</typeparam>
-        /// <param name="attribute">The <c>XAttribute</c> with value as a string.</param>
+        /// <param name="attribute">The <c>XAttribute</c> with string value.</param>
         /// <param name="defaultValue">The default value which will be returned if attribute is <c>null</c> or it has <c>string.Empty</c> value.</param>
         /// <returns>Value of the specified type.</returns>
         /// <exception cref="XmlException">The value of an attribute cannot be converted to specified type.</exception>
@@ -117,13 +120,69 @@ namespace XmlGoodies
                 return defaultValue;
             }
 
-            Type typeOfT = typeof(T);
-            if (typeOfT.IsEnum)
+            string value = attribute.Value;
+            try
             {
-                return ConvertToEnumType<T>(attribute, typeOfT);
+                return ConvertValueType<T>(value);
             }
-            
-            return ConvertToBuiltInValueType<T>(attribute, typeOfT);
+            catch (Exception ex)
+            {
+                throw new XmlException(string.Format("The attribute '{0}' has value '{1}' which cannot be converted to the value of type '{2}'.",
+                        attribute.Name, attribute.Value, typeof (T).Name), ex);
+            }
+        }
+
+        /// <summary>
+        /// Gets the typed value of this <c>XElement</c>.
+        /// </summary>
+        /// <typeparam name="T">Type to which element value will be converted.</typeparam>
+        /// <param name="element">The <c>XElement</c> with string value.</param>
+        /// <param name="defaultValue">The default value which will be returned if element is <c>null</c> or it has <c>string.Empty</c> value.</param>
+        /// <returns>Value of the specified type.</returns>
+        /// <exception cref="XmlException">The value of an element cannot be converted to specified type.</exception>
+        /// <remarks>
+        /// This method allows to convert value to one of the following types:
+        /// <list type="bullet">
+        /// <item><c>int</c></item>
+        /// <item><c>uint</c></item>
+        /// <item><c>byte</c></item>
+        /// <item><c>sbyte</c></item>
+        /// <item><c>short</c></item>
+        /// <item><c>ushort</c></item>
+        /// <item><c>char</c></item>
+        /// <item><c>long</c></item>
+        /// <item><c>ulong</c></item>
+        /// <item><c>float</c></item>
+        /// <item><c>double</c></item>
+        /// <item><c>decimal</c></item>
+        /// <item><c>bool</c></item>
+        /// <item><c>DateTime</c></item>
+        /// <item>Any <c>enum</c> (including flags with multiple values)</item>
+        /// </list>
+        /// The conversion of enumeration values is case-insensitive.</remarks>
+        public static T Value<T>(this XElement element, T defaultValue = default(T)) where T : struct, IConvertible
+        {
+            if (element == null || string.IsNullOrEmpty(element.Value))
+            {
+                return defaultValue;
+            }
+
+            string value = element.Value;
+            try
+            {
+                Type typeOfT = typeof (T);
+                if (typeOfT.IsEnum)
+                {
+                    return (T) Enum.Parse(typeOfT, value, ignoreCase: true);
+                }
+
+                return (T) Convert.ChangeType(value, typeof (T));
+            }
+            catch (Exception ex)
+            {
+                throw new XmlException(string.Format("The element '{0}' has value '{1}' which cannot be converted to the value of type '{2}'.",
+                        element.Name, element.Value, typeof (T).Name), ex);
+            }
         }
 
         /// <summary>
@@ -132,7 +191,7 @@ namespace XmlGoodies
         /// <typeparam name="T">Type to which attribute value will be converted.</typeparam>
         /// <param name="attribute">The <c>XAttribute</c> with value as a string.</param>
         /// <param name="convert">Function that converts string value to an instance of specified type.</param>
-        /// <returns>Converted value of the specified type or <c>default(T)</c> if attribute was equal to <c>null</c>.</returns>
+        /// <returns>Converted value of the specified type or <c>default(T)</c> if attribute was <c>null</c>.</returns>
         public static T Value<T>(this XAttribute attribute, Func<string, T> convert)
         {
             if (attribute == null)
@@ -141,6 +200,23 @@ namespace XmlGoodies
             }
 
             return convert(attribute.Value);
+        }
+
+        /// <summary>
+        /// Gets typed value of this <c>XElement</c> using specified conversion method.
+        /// </summary>
+        /// <typeparam name="T">Type to which attribute value will be converted.</typeparam>
+        /// <param name="element">The <c>XElement</c> with value as a string.</param>
+        /// <param name="convert">Function that converts string value to an instance of specified type.</param>
+        /// <returns>Converted value of the specified type or <c>default(T)</c> if element was <c>null</c>.</returns>
+        public static T Value<T>(this XElement element, Func<string, T> convert)
+        {
+            if (element == null)
+            {
+                return default(T);
+            }
+
+            return convert(element.Value);
         }
 
         /// <summary>
@@ -168,15 +244,33 @@ namespace XmlGoodies
         /// <param name="name">The <c>XName</c> of the <c>XElement</c> to generate.</param>
         /// <param name="value">The node value.</param>
         /// <param name="defaultValue">The default value which shouldn't be outputted.</param>
-        /// <returns>New <c>XElement</c> if <c>value</c> is not <c>null</c> or default; <c>null</c> otherwise.</returns>
+        /// <returns>New <c>XElement</c> if <c>value</c> is not default; <c>null</c> otherwise.</returns>
         /// <remarks>This method allows to skip generation of empty <c>XElement</c> nodes.</remarks>
-        public static XElement NewOptionalXElement(XName name, object value, object defaultValue = null)
+        public static XElement NewOptionalXElement<T>(XName name, T value, T defaultValue = default(T))
         {
-            if (value != null && !value.Equals(defaultValue))
+            if (!EqualityComparer<T>.Default.Equals(value, defaultValue))
             {
                 return new XElement(name, value);
             }
-            
+
+            return null;
+        }
+
+        /// <summary>
+        /// Outputs new <c>XElement</c> with a set of child elements if condition was satisfied.
+        /// </summary>
+        /// <param name="name">The <c>XName</c> of the <c>XElement</c> to generate.</param>
+        /// <param name="condition">Boolean expression showing whether node should be generated.</param>
+        /// <param name="values">Children nodes or values.</param>
+        /// <returns>New <c>XElement</c> if <c>condition</c> was satisfied; <c>null</c> otherwise.</returns>
+        /// <remarks>This method allows to skip generation of the XML subtree if precondition wasn't met.</remarks>
+        public static XElement NewOptionalXElements(XName name, Func<bool> condition, params object[] values)
+        {
+            if (condition())
+            {
+                return new XElement(name, values);
+            }
+
             return null;
         }
 
@@ -198,28 +292,15 @@ namespace XmlGoodies
             return null;
         }
 
-
-        private static T ConvertToBuiltInValueType<T>(XAttribute attribute, Type typeOfT) where T : IConvertible
+        private static T ConvertValueType<T>(string value) where T : struct, IConvertible
         {
-            try
+            Type typeOfT = typeof (T);
+            if (typeOfT.IsEnum)
             {
-                return (T)Convert.ChangeType(attribute.Value, typeof(T));
-            }
-            catch (Exception)
-            {
-                throw new XmlException(string.Format("The attribute '{0}' has value '{1}' which cannot be converted to the value of type '{2}'.", attribute.Name, attribute.Value, typeOfT.Name));
-            }
-        }
-
-        private static T ConvertToEnumType<T>(XAttribute attribute, Type typeOfT) where T : struct, IConvertible
-        {
-            T value;
-            if (!Enum.TryParse(attribute.Value, /* ignoreCase = */ true, out value))
-            {
-                throw new XmlException(string.Format("The attribute '{0}' has value '{1}' which cannot be converted to the value of type '{2}'.", attribute.Name, attribute.Value, typeOfT.Name));
+                return (T) Enum.Parse(typeOfT, value, ignoreCase: true);
             }
 
-            return value;
+            return (T) Convert.ChangeType(value, typeof (T));
         }
 
         private static XAttribute GetEmptyAttribute(XName name, string defaultValue)
